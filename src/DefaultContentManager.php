@@ -262,7 +262,7 @@ class DefaultContentManager implements DefaultContentManagerInterface {
             }
           }
 
-          $is_new ? $entity->setOriginalId($original_id) : $entity->enforceIsNew($is_new);
+          !$is_new ? $entity->setOriginalId($original_id) : $entity->enforceIsNew($is_new);
 
           if (!$old_entity || $update_existing) {
             $entity->save();
