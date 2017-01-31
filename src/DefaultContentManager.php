@@ -7,12 +7,15 @@ use Drupal\Component\Render\FormattableMarkup;
 use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\EntityRepositoryInterface;
+use Drupal\Core\Entity\RevisionableInterface;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Extension\InfoParserInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\default_content\Event\DefaultContentEvents;
 use Drupal\default_content\Event\ExportEvent;
 use Drupal\default_content\Event\ImportEvent;
+use Drupal\entity_reference_revisions\EntityReferenceRevisionsFieldItemList;
 use Drupal\rest\LinkManager\LinkManagerInterface;
 use Drupal\rest\Plugin\Type\ResourcePluginManager;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -118,7 +121,7 @@ class DefaultContentManager implements DefaultContentManagerInterface {
    *   The serializer service.
    * @param \Drupal\rest\Plugin\Type\ResourcePluginManager $resource_plugin_manager
    *   The rest resource plugin manager.
-   * @param \Drupal\Core\Session|AccountInterface $current_user
+   * @param \Drupal\Core\Session\AccountInterface $current_user
    *   The current user.
    * @param \Drupal\Core\Entity\EntityTypeManagerInterface $entity_manager
    *   The entity type manager service.
@@ -147,7 +150,7 @@ class DefaultContentManager implements DefaultContentManagerInterface {
   /**
    * {@inheritdoc}
    */
-  public function importContent($module) {
+  public function importContent($module, $update_existing = FALSE) {
     $created = array();
     $folder = drupal_get_path('module', $module) . "/content";
 
@@ -219,9 +222,50 @@ class DefaultContentManager implements DefaultContentManagerInterface {
           $contents = $this->parseFile($file);
           $class = $definition['serialization_class'];
           $entity = $this->serializer->deserialize($contents, $class, 'hal_json', array('request_method' => 'POST'));
-          $entity->enforceIsNew(TRUE);
-          $entity->save();
-          $created[$entity->uuid()] = $entity;
+          $is_new = TRUE;
+
+          // Allow existing entities overwrite.
+          if ($old_entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $entity->uuid())) {
+            if ($update_existing) {
+              $original_id = $old_entity->id();
+              $entity->{$entity->getEntityType()->getKey('id')} = $original_id;
+              $is_new = FALSE;
+              if ($this->isRevisionableEntity($entity)) {
+                $entity->setNewRevision(FALSE);
+              }
+            }
+          }
+          else {
+            if ($this->isRevisionableEntity($entity)) {
+              $entity->setNewRevision(TRUE);
+            }
+          }
+
+
+          // We need to retrieve the correct revisions for reference fields.
+          // We can't rely on the target_revision_id exported in the serialized object.
+          foreach ($entity->getFieldDefinitions() as $field_definition) {
+            $field = $entity->{$field_definition->getName()};
+            if ($field instanceof EntityReferenceRevisionsFieldItemList) {
+              $values = $field->getValue();
+              $target_type = $field->getFieldDefinition()->getSetting('target_type');
+              foreach ($values as $k => $value) {
+                $referenced_entity = $this->entityManager->getStorage($target_type)->loadRevision($value['target_id']);
+                if ($referenced_entity) {
+                  $revision = $created[$referenced_entity->uuid()];
+                  $values[$k]['target_revision_id'] = $this->isRevisionableEntity($revision) ? (string) $revision->getRevisionId() : $referenced_entity->getRevisionId();
+                }
+              }
+              $field->setValue($values);
+            }
+          }
+
+          $is_new ? $entity->setOriginalId($original_id) : $entity->enforceIsNew($is_new);
+
+          if (!$old_entity || $update_existing) {
+            $entity->save();
+            $created[$entity->uuid()] = $entity;
+          }
         }
       }
       $this->eventDispatcher->dispatch(DefaultContentEvents::IMPORT, new ImportEvent($created, $module));
@@ -231,6 +275,19 @@ class DefaultContentManager implements DefaultContentManagerInterface {
     // Reset link domain.
     $this->linkManager->setLinkDomain(FALSE);
     return $created;
+  }
+
+  /**
+   * Checks a given entity for revision support.
+   *
+   * @param EntityInterface $entity
+   *   A typical drupal entity object.
+   *
+   * @return bool
+   *   Whether this entity supports revisions.
+   */
+  public function isRevisionableEntity(EntityInterface $entity) {
+    return $entity instanceof RevisionableInterface && $entity->getEntityType()->isRevisionable();
   }
 
   /**
