@@ -8,13 +8,14 @@ use Drupal\Core\Entity\ContentEntityInterface;
 use Drupal\Core\Entity\EntityTypeManagerInterface;
 use Drupal\Core\Entity\EntityRepositoryInterface;
 use Drupal\Core\Entity\RevisionableInterface;
-use Drupal\entity_reference_revisions\EntityReferenceRevisionsFieldItemList;
+use Drupal\Core\Entity\EntityInterface;
 use Drupal\Core\Extension\InfoParserInterface;
 use Drupal\Core\Extension\ModuleHandlerInterface;
 use Drupal\Core\Session\AccountInterface;
 use Drupal\default_content\Event\DefaultContentEvents;
 use Drupal\default_content\Event\ExportEvent;
 use Drupal\default_content\Event\ImportEvent;
+use Drupal\entity_reference_revisions\EntityReferenceRevisionsFieldItemList;
 use Drupal\rest\LinkManager\LinkManagerInterface;
 use Drupal\rest\Plugin\Type\ResourcePluginManager;
 use Symfony\Component\EventDispatcher\EventDispatcherInterface;
@@ -226,11 +227,10 @@ class DefaultContentManager implements DefaultContentManagerInterface {
           // Allow existing entities overwrite.
           if ($old_entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $entity->uuid())) {
             if ($update_existing) {
-              $entity->{$entity->getEntityType()->getKey('id')} = $old_entity->id();
-              $is_new = FALSE;
               $original_id = $old_entity->id();
+              $entity->{$entity->getEntityType()->getKey('id')} = $original_id;
+              $is_new = FALSE;
               if ($this->isRevisionableEntity($entity)) {
-                $entity->{$entity->getEntityType()->getKey('revision')} = $old_entity->getRevisionId();
                 $entity->setNewRevision(FALSE);
               }
             }
@@ -240,6 +240,7 @@ class DefaultContentManager implements DefaultContentManagerInterface {
               $entity->setNewRevision(TRUE);
             }
           }
+
 
           // We need to retrieve the correct revisions for reference fields.
           // We can't rely on the target_revision_id exported in the serialized object.
@@ -279,13 +280,13 @@ class DefaultContentManager implements DefaultContentManagerInterface {
   /**
    * Checks a given entity for revision support.
    *
-   * @param \Drupal\Core\Entity\EntityInterface $entity
+   * @param EntityInterface $entity
    *   A typical drupal entity object.
    *
    * @return bool
    *   Whether this entity supports revisions.
    */
-  public function isRevisionableEntity($entity) {
+  public function isRevisionableEntity(EntityInterface $entity) {
     return $entity instanceof RevisionableInterface && $entity->getEntityType()->isRevisionable();
   }
 
