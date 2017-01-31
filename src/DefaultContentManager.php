@@ -286,8 +286,8 @@ class DefaultContentManager implements DefaultContentManagerInterface {
    * @return bool
    *   Whether this entity supports revisions.
    */
-  public function isRevisionableEntity(EntityInterface $entity) {
-    return $entity instanceof RevisionableInterface && $entity->getEntityType()->isRevisionable();
+  public function isRevisionableEntity($entity) {
+    return $entity && $entity instanceof RevisionableInterface && $entity->getEntityType()->isRevisionable();
   }
 
   /**
