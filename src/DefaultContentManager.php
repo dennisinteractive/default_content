@@ -228,9 +228,11 @@ class DefaultContentManager implements DefaultContentManagerInterface {
           if ($old_entity = $this->entityRepository->loadEntityByUuid($entity_type_id, $entity->uuid())) {
             if ($update_existing) {
               $original_id = $old_entity->id();
+              $original_revision = $old_entity->getRevisionId();
               $entity->{$entity->getEntityType()->getKey('id')} = $original_id;
               $is_new = FALSE;
               if ($this->isRevisionableEntity($entity)) {
+                $entity->{$entity->getEntityType()->getKey('revision')} = $original_revision;
                 $entity->setNewRevision(FALSE);
               }
             }
