@@ -252,10 +252,10 @@ class DefaultContentManager implements DefaultContentManagerInterface {
               $values = $field->getValue();
               $target_type = $field->getFieldDefinition()->getSetting('target_type');
               foreach ($values as $k => $value) {
-                $referenced_entity = $this->entityManager->getStorage($target_type)->loadRevision($value['target_id']);
+                $referenced_entity = $this->entityManager->getStorage($target_type)->load($value['target_id']);
                 if ($referenced_entity) {
                   $revision = $created[$referenced_entity->uuid()];
-                  $values[$k]['target_revision_id'] = $this->isRevisionableEntity($revision) ? (string) $revision->getRevisionId() : $referenced_entity->getRevisionId();
+                  $values[$k]['target_revision_id'] = (string) ($this->isRevisionableEntity($revision) ? $revision->getRevisionId() : $referenced_entity->getRevisionId());
                 }
               }
               $field->setValue($values);
