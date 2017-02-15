@@ -222,6 +222,9 @@ class DefaultContentManager implements DefaultContentManagerInterface {
           $contents = $this->parseFile($file);
           $class = $definition['serialization_class'];
           $entity = $this->serializer->deserialize($contents, $class, 'hal_json', array('request_method' => 'POST'));
+          // Remove the revision ID from the imported entity. This will prevent the
+          // revision id sequence errors that occur when imported entities are saved.
+          unset($entity->revision_id);  
           $is_new = TRUE;
 
           // Allow existing entities overwrite.
